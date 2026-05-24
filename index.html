@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚦</text></svg>">
+  <title>Smart Traffic Signal Optimization</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d1a;
+      --surface: #111827;
+      --surface2: #1a2236;
+      --border: rgba(255,255,255,0.08);
+      --text: #e2e8f0;
+      --muted: #6b7280;
+      --green: #22d3a0;
+      --yellow: #fbbf24;
+      --red: #f43f5e;
+      --blue: #38bdf8;
+      --pink: #ec4899;
+      --orange: #fb923c;
+      --purple: #a78bfa;
+      --road: #1c1f26;
+      --road-line: #2d3748;
+      --glow-green: 0 0 20px rgba(34,211,160,0.4);
+      --glow-yellow: 0 0 20px rgba(251,191,36,0.4);
+      --glow-red: 0 0 20px rgba(244,63,94,0.4);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* Grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app { position: relative; z-index: 1; }
+
+    /* ── HEADER ── */
+    header {
+      text-align: center;
+      padding: 28px 16px 16px;
+      position: relative;
+    }
+
+    .header-badge {
+      display: inline-block;
+      background: rgba(34,211,160,0.1);
+      border: 1px solid rgba(34,211,160,0.3);
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 10px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    header h1 {
+      font-size: clamp(20px, 4vw, 32px);
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 20px;
+      text-align: center;
+      min-width: 90px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 2px;
+    }
+
+    .stat-card.active-card::after  { background: var(--green); }
+    .stat-card.waiting-card::after { background: var(--yellow); }
+    .stat-card.treated-card::after { background: var(--blue); }
+    .stat-card.cycle-card::after   { background: var(--purple); }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-value {
+      font-size: 26px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 2px;
+    }
+
+    .active-card  .stat-value { color: var(--green); }
+    .waiting-card .stat-value { color: var(--yellow); }
+    .treated-card .stat-value { color: var(--blue); }
+    .cycle-card   .stat-value { color: var(--purple); }
+
+    /* ── MAIN LAYOUT ── */
+    .main-layout {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 10px 16px;
+      flex-wrap: wrap;
+    }
+
+    /* ── MANUAL INPUT PANEL ── */
+    .input-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      min-width: 200px;
+      flex-shrink: 0;
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .dir-input-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .dir-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dir-name {
+      font-size: 13px;
+      font-weight: 600;
+      width: 50px;
+      color: var(--text);
+    }
+
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px 8px;
+    }
+
+    .step-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 16px;
+      cursor: pointer;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      transition: all 0.15s;
+      line-height: 1;
+    }
+
+    .step-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+
+    .step-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      font-weight: 700;
+      width: 28px;
+      text-align: center;
+      color: #fff;
+    }
+
+    .apply-btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--green), #0ea5e9);
+      color: #000;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.2s;
+      margin-top: 4px;
+      letter-spacing: 0.5px;
+    }
+
+    .apply-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+
+    /* ── INTERSECTION ── */
+    .intersection-wrapper {
+      flex: 0 0 auto;
+    }
+
+    .intersection {
+      position: relative;
+      width: min(460px, 90vw);
+      height: min(460px, 90vw);
+    }
+
+    /* Roads */
+    .road-h, .road-v {
+      position: absolute;
+      background: var(--road);
+    }
+
+    .road-h {
+      top: 50%; left: 0;
+      width: 100%; height: 22%;
+      transform: translateY(-50%);
+    }
+
+    .road-v {
+      left: 50%; top: 0;
+      height: 100%; width: 22%;
+      transform: translateX(-50%);
+    }
+
+    /* Dashed center line */
+    .road-h::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 0;
+      width: 100%; height: 2px;
+      transform: translateY(-50%);
+      background: repeating-linear-gradient(90deg, #facc15 0, #facc15 18px, transparent 18px, transparent 36px);
+      opacity: 0.3;
+    }
+
+    .road-v::after {
+      content: '';
+      position: absolute;
+      left: 50%; top: 0;
+      height: 100%; width: 2px;
+      transform: translateX(-50%);
+      background: repeating-linear-gradient(180deg, #facc15 0, #facc15 18px, transparent 18px, transparent 36px);
+      opacity: 0.3;
+    }
+
+    /* Lane markings */
+    .road-h::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to bottom, rgba(255,255,255,0.04) 0%, transparent 30%, transparent 70%, rgba(255,255,255,0.04) 100%);
+    }
+
+    /* Intersection box */
+    .center-box {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      width: 22%; height: 22%;
+      background: #151a24;
+      z-index: 2;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    /* Crosswalk stripes */
+    .crosswalk {
+      position: absolute;
+      z-index: 3;
+    }
+
+    .crosswalk.cw-n {
+      bottom: 0; left: 0; right: 0; height: 8px;
+      background: repeating-linear-gradient(90deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 8px, transparent 8px, transparent 16px);
+    }
+
+    .crosswalk.cw-s {
+      top: 0; left: 0; right: 0; height: 8px;
+      background: repeating-linear-gradient(90deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 8px, transparent 8px, transparent 16px);
+    }
+
+    .crosswalk.cw-e {
+      top: 0; bottom: 0; left: 0; width: 8px;
+      background: repeating-linear-gradient(180deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 8px, transparent 8px, transparent 16px);
+    }
+
+    .crosswalk.cw-w {
+      top: 0; bottom: 0; right: 0; width: 8px;
+      background: repeating-linear-gradient(180deg, rgba(255,255,255,0.12) 0, rgba(255,255,255,0.12) 8px, transparent 8px, transparent 16px);
+    }
+
+    /* ── SIGNALS ── */
+    .signal {
+      position: absolute;
+      z-index: 12;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .signal.north { top: 3%; left: 50%; transform: translateX(-50%); }
+    .signal.south { bottom: 3%; left: 50%; transform: translateX(-50%); }
+    .signal.east  { right: 3%; top: 50%; transform: translateY(-50%); }
+    .signal.west  { left: 3%; top: 50%; transform: translateY(-50%); }
+
+    .signal-box {
+      background: #0d1117;
+      border: 2px solid #2d3748;
+      border-radius: 10px;
+      padding: 7px 5px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      align-items: center;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .signal.east .signal-box,
+    .signal.west .signal-box {
+      flex-direction: row;
+      padding: 5px 7px;
+    }
+
+    .bulb {
+      width: clamp(12px,3vw,18px);
+      height: clamp(12px,3vw,18px);
+      border-radius: 50%;
+      background: #1a1f2e;
+      transition: background 0.3s, box-shadow 0.3s;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .bulb.red.on    { background: var(--red);    box-shadow: var(--glow-red); }
+    .bulb.yellow.on { background: var(--yellow); box-shadow: var(--glow-yellow); }
+    .bulb.green.on  { background: var(--green);  box-shadow: var(--glow-green); }
+
+    .signal.active-signal .signal-box {
+      border-color: var(--green);
+      box-shadow: 0 0 20px rgba(34,211,160,0.3);
+    }
+
+    .signal-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    /* ── TIMER RING ── */
+    .timer-ring {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 6;
+      text-align: center;
+    }
+
+    .timer-ring svg { display: block; }
+
+    .timer-text {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: clamp(13px, 2.5vw, 18px);
+      font-weight: 700;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── ANIMATED CARS ── */
+    .car {
+      position: absolute;
+      border-radius: 3px;
+      z-index: 9;
+      transition: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+
+    /* Queue panel */
+    .queue-panel {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 16px;
+    }
+
+    .queue-lane {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px 16px;
+      min-width: 105px;
+      text-align: center;
+    }
+
+    .lane-name {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .bar-bg {
+      background: rgba(255,255,255,0.07);
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+
+    .queue-count {
+      font-size: 14px;
+      font-weight: 700;
+      margin-top: 6px;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 12px 16px 28px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+      letter-spacing: 0.3px;
+    }
+
+    .btn-start { background: var(--green); color: #000; }
+    .btn-pause { background: var(--yellow); color: #000; }
+    .btn-reset { background: var(--red); color: #fff; }
+    .btn-add   { background: var(--blue); color: #000; }
+
+    .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn:active { transform: scale(0.97); }
+
+    /* Algo info */
+    .algo-info {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      padding: 4px 16px 10px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .algo-info span { color: var(--green); font-weight: 600; }
+
+    /* Pulse animation for active signal */
+    @keyframes pulseGreen {
+      0%, 100% { box-shadow: 0 0 20px rgba(34,211,160,0.3); }
+      50% { box-shadow: 0 0 35px rgba(34,211,160,0.6); }
+    }
+
+    .signal.active-signal .signal-box {
+      animation: pulseGreen 1.5s ease-in-out infinite;
+    }
+
+    /* Car animations */
+    @keyframes carMoveN {
+      0%   { transform: translateX(-50%) translateY(0); opacity: 1; }
+      100% { transform: translateX(-50%) translateY(-200%); opacity: 0; }
+    }
+    @keyframes carMoveS {
+      0%   { transform: translateX(-50%) translateY(0); opacity: 1; }
+      100% { transform: translateX(-50%) translateY(200%); opacity: 0; }
+    }
+    @keyframes carMoveE {
+      0%   { transform: translateY(-50%) translateX(0); opacity: 1; }
+      100% { transform: translateY(-50%) translateX(200%); opacity: 0; }
+    }
+    @keyframes carMoveW {
+      0%   { transform: translateY(-50%) translateX(0); opacity: 1; }
+      100% { transform: translateY(-50%) translateX(-200%); opacity: 0; }
+    }
+
+    /* Waiting car gentle bob */
+    @keyframes waitBob {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-2px); }
+    }
+
+    .queued-car {
+      position: absolute;
+      border-radius: 4px;
+      z-index: 9;
+      transition: all 0.4s ease;
+    }
+
+    .moving-car {
+      position: absolute;
+      border-radius: 4px;
+      z-index: 11;
+    }
+
+    .car-emoji {
+      font-size: clamp(10px, 2.5vw, 14px);
+      line-height: 1;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 600px) {
+      .main-layout { flex-direction: column; align-items: center; }
+      .input-panel { width: 100%; max-width: 340px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div class="header-badge">● LIVE SIM</div>
+  <h1>🚦 Smart Traffic Optimizer</h1>
+  <p>// greedy algorithm — max queue gets green</p>
+</header>
+
+<!-- Stats -->
+<div class="stats-bar">
+  <div class="stat-card active-card">
+    <div class="stat-label">Active</div>
+    <div class="stat-value" id="stat-active">—</div>
+  </div>
+  <div class="stat-card waiting-card">
+    <div class="stat-label">Waiting</div>
+    <div class="stat-value" id="stat-waiting">0</div>
+  </div>
+  <div class="stat-card treated-card">
+    <div class="stat-label">Passed</div>
+    <div class="stat-value" id="stat-treated">0</div>
+  </div>
+  <div class="stat-card cycle-card">
+    <div class="stat-label">Cycle</div>
+    <div class="stat-value" id="stat-cycle">1</div>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="main-layout">
+
+  <!-- Input Panel -->
+  <div class="input-panel">
+    <div class="panel-title">Set Queue</div>
+
+    <div class="dir-input-row">
+      <div class="dir-dot" style="background:#38bdf8"></div>
+      <div class="dir-name">North</div>
+      <div class="stepper">
+        <button class="step-btn" onclick="stepDir('N',-1)">−</button>
+        <div class="step-val" id="in-N">3</div>
+        <button class="step-btn" onclick="stepDir('N',1)">+</button>
+      </div>
+    </div>
+
+    <div class="dir-input-row">
+      <div class="dir-dot" style="background:#ec4899"></div>
+      <div class="dir-name">South</div>
+      <div class="stepper">
+        <button class="step-btn" onclick="stepDir('S',-1)">−</button>
+        <div class="step-val" id="in-S">2</div>
+        <button class="step-btn" onclick="stepDir('S',1)">+</button>
+      </div>
+    </div>
+
+    <div class="dir-input-row">
+      <div class="dir-dot" style="background:#fb923c"></div>
+      <div class="dir-name">East</div>
+      <div class="stepper">
+        <button class="step-btn" onclick="stepDir('E',-1)">−</button>
+        <div class="step-val" id="in-E">5</div>
+        <button class="step-btn" onclick="stepDir('E',1)">+</button>
+      </div>
+    </div>
+
+    <div class="dir-input-row">
+      <div class="dir-dot" style="background:#a78bfa"></div>
+      <div class="dir-name">West</div>
+      <div class="stepper">
+        <button class="step-btn" onclick="stepDir('W',-1)">−</button>
+        <div class="step-val" id="in-W">1</div>
+        <button class="step-btn" onclick="stepDir('W',1)">+</button>
+      </div>
+    </div>
+
+    <button class="apply-btn" onclick="applyManualQueues()">✓ Apply Queues</button>
+  </div>
+
+  <!-- Intersection -->
+  <div class="intersection-wrapper">
+    <div class="intersection" id="intersection">
+      <div class="road-h"></div>
+      <div class="road-v"></div>
+
+      <div class="center-box">
+        <div class="crosswalk cw-n"></div>
+        <div class="crosswalk cw-s"></div>
+        <div class="crosswalk cw-e"></div>
+        <div class="crosswalk cw-w"></div>
+      </div>
+
+      <!-- Signals -->
+      <div class="signal north" id="sig-N">
+        <div class="signal-box">
+          <div class="bulb red" id="N-red"></div>
+          <div class="bulb yellow" id="N-yellow"></div>
+          <div class="bulb green" id="N-green"></div>
+        </div>
+        <div class="signal-label">N</div>
+      </div>
+
+      <div class="signal south" id="sig-S">
+        <div class="signal-label">S</div>
+        <div class="signal-box">
+          <div class="bulb red" id="S-red"></div>
+          <div class="bulb yellow" id="S-yellow"></div>
+          <div class="bulb green" id="S-green"></div>
+        </div>
+      </div>
+
+      <div class="signal east" id="sig-E">
+        <div class="signal-box">
+          <div class="bulb red" id="E-red"></div>
+          <div class="bulb yellow" id="E-yellow"></div>
+          <div class="bulb green" id="E-green"></div>
+        </div>
+        <div class="signal-label">E</div>
+      </div>
+
+      <div class="signal west" id="sig-W">
+        <div class="signal-box">
+          <div class="bulb red" id="W-red"></div>
+          <div class="bulb yellow" id="W-yellow"></div>
+          <div class="bulb green" id="W-green"></div>
+        </div>
+        <div class="signal-label">W</div>
+      </div>
+
+      <!-- Timer Ring -->
+      <div class="timer-ring">
+        <svg width="72" height="72" viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="5"/>
+          <circle cx="36" cy="36" r="30" fill="none" stroke="var(--green)" stroke-width="5"
+            stroke-dasharray="188.4" stroke-dashoffset="0"
+            stroke-linecap="round"
+            transform="rotate(-90 36 36)"
+            id="timer-circle"/>
+        </svg>
+        <div class="timer-text" id="timer-text">—</div>
+      </div>
+
+      <!-- Car canvas container -->
+      <div id="car-layer" style="position:absolute;inset:0;z-index:10;pointer-events:none;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Queue Bars -->
+<div class="queue-panel">
+  <div class="queue-lane">
+    <div class="lane-name">North</div>
+    <div class="bar-bg"><div class="bar-fill" id="bar-N" style="width:0%;background:#38bdf8
